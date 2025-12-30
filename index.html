@@ -7,11 +7,11 @@
 
 <style>
   body {
-    font-family: system-ui, -apple-system, BlinkMacSystemFont;
-    background: #111;
-    color: #fff;
     margin: 0;
     padding: 16px;
+    background: #111;
+    color: #fff;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont;
     display: flex;
     justify-content: center;
   }
@@ -23,12 +23,12 @@
   }
 
   h1 {
-    margin-bottom: 8px;
     font-size: 1.4rem;
+    margin-bottom: 8px;
   }
 
   .countdown {
-    font-size: 2.4rem;
+    font-size: 2.6rem;
     margin: 16px 0;
   }
 
@@ -41,35 +41,47 @@
     color: #aaa;
   }
 
-  button, input {
+  label {
+    display: block;
+    text-align: left;
+    margin-top: 14px;
+    font-size: 0.9rem;
+    color: #ccc;
+  }
+
+  input, button {
     width: 100%;
     padding: 14px;
-    margin-top: 10px;
+    margin-top: 8px;
     font-size: 1rem;
     border-radius: 8px;
     border: none;
+    box-sizing: border-box;
+  }
+
+  input {
+    background: #222;
+    color: #fff;
   }
 
   button {
     background: #2d7cff;
-    color: white;
+    color: #fff;
+    cursor: pointer;
   }
 
   button.secondary {
     background: #444;
   }
 
-  input {
-    background: #222;
-    color: white;
+  .status {
+    margin-top: 10px;
+    font-size: 0.85rem;
+    color: #7cff7c;
   }
 
-  label {
-    font-size: 0.9rem;
-    margin-top: 12px;
-    display: block;
-    text-align: left;
-    color: #ccc;
+  .status.off {
+    color: #ffb84d;
   }
 </style>
 </head>
@@ -84,7 +96,10 @@
   <label>提前提醒（分钟）</label>
   <input type="number" id="notifyBefore" min="1" value="10" />
 
-  <button onclick="markBossNow()">🔴 Boss 刚刷</button>
+  <button onclick="enableNotifications()">🔔 开启提醒</button>
+  <div id="notifyStatus" class="status off">提醒未开启</div>
+
+  <button class="secondary" onclick="markBossNow()">🔴 Boss 刚刷</button>
 
   <label>手动输入上次 Boss 时间</label>
   <input type="datetime-local" id="manualTime" />
@@ -92,9 +107,10 @@
 </div>
 
 <script>
-const BOSS_INTERVAL = 105 * 60 * 1000; // 固定 105 分钟
+const BOSS_INTERVAL = 105 * 60 * 1000;
 let lastBossUTC = null;
 let notifyTimeout = null;
+let notificationsEnabled = false;
 
 function nowUTC() {
   return Date.now();
@@ -109,16 +125,43 @@ function loadLastBoss() {
   return v ? parseInt(v, 10) : null;
 }
 
-function requestNotifyPermission() {
-  if (Notification.permission === "default") {
-    Notification.requestPermission();
+function saveNotifyEnabled(v) {
+  localStorage.setItem("notifyEnabled", v ? "1" : "0");
+}
+
+function loadNotifyEnabled() {
+  return localStorage.getItem("notifyEnabled") === "1";
+}
+
+function updateNotifyStatus() {
+  const el = document.getElementById("notifyStatus");
+  if (notificationsEnabled) {
+    el.textContent = "提醒已开启";
+    el.classList.remove("off");
+  } else {
+    el.textContent = "提醒未开启";
+    el.classList.add("off");
   }
+}
+
+function enableNotifications() {
+  Notification.requestPermission().then(p => {
+    if (p === "granted") {
+      notificationsEnabled = true;
+      saveNotifyEnabled(true);
+      updateNotifyStatus();
+      if (lastBossUTC) {
+        scheduleNotification(lastBossUTC + BOSS_INTERVAL);
+      }
+    } else {
+      alert("需要允许通知权限才能提醒");
+    }
+  });
 }
 
 function scheduleNotification(nextBossUTC) {
   clearTimeout(notifyTimeout);
-
-  if (Notification.permission !== "granted") return;
+  if (!notificationsEnabled || Notification.permission !== "granted") return;
 
   const mins = parseInt(document.getElementById("notifyBefore").value, 10);
   const notifyTime = nextBossUTC - mins * 60 * 1000;
@@ -126,8 +169,8 @@ function scheduleNotification(nextBossUTC) {
 
   if (delay > 0) {
     notifyTimeout = setTimeout(() => {
-      new Notification("World Boss Incoming", {
-        body: `Boss will spawn in ${mins} minutes`
+      new Notification("World Boss 即将刷新", {
+        body: `还有 ${mins} 分钟刷新`
       });
     }, delay);
   }
@@ -148,12 +191,10 @@ function update() {
 
   const mins = Math.floor(diff / 60000);
   const secs = Math.floor((diff % 60000) / 1000);
-  const el = document.getElementById("countdown");
 
-  el.textContent =
-    `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
-
-  el.classList.toggle("red", diff < 10 * 60 * 1000);
+  const cd = document.getElementById("countdown");
+  cd.textContent = `${String(mins).padStart(2,"0")}:${String(secs).padStart(2,"0")}`;
+  cd.classList.toggle("red", diff < 10 * 60 * 1000);
 
   document.getElementById("nextTime").textContent =
     "Next Boss: " + new Date(nextBossUTC).toLocaleString();
@@ -166,19 +207,18 @@ function markBossNow() {
 }
 
 function setManualTime() {
-  const input = document.getElementById("manualTime").value;
-  if (!input) return;
-
-  // 关键修复点：只取 timestamp
-  const ts = new Date(input).getTime();
+  const v = document.getElementById("manualTime").value;
+  if (!v) return;
+  const ts = new Date(v).getTime();
   lastBossUTC = ts;
   saveLastBoss(ts);
   scheduleNotification(ts + BOSS_INTERVAL);
 }
 
 (function init() {
-  requestNotifyPermission();
   lastBossUTC = loadLastBoss();
+  notificationsEnabled = loadNotifyEnabled();
+  updateNotifyStatus();
   setInterval(update, 1000);
 })();
 </script>
