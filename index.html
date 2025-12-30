@@ -1,70 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <title>D4 世界 Boss</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="manifest" href="manifest.json">
+
+  <style>
+    body {
+      background: #0e0e0e;
+      color: #fff;
+      font-family: system-ui, sans-serif;
+      margin: 0;
+      padding: 16px;
+      text-align: center;
+    }
+
+    h2 {
+      font-size: 1.5rem;
+      margin-bottom: 12px;
+    }
+
+    .btn {
+      width: 100%;
+      padding: 14px;
+      margin: 8px 0;
+      font-size: 1rem;
+      border-radius: 10px;
+      border: none;
+      background: #2c2c2c;
+      color: #fff;
+    }
+
+    .btn.primary {
+      background: #b30000;
+    }
+
+    .countdown {
+      font-size: 2rem;
+      margin-top: 16px;
+    }
+
+    .danger {
+      color: #ff3b3b;
+    }
+
+    input, select {
+      width: 100%;
+      padding: 12px;
+      font-size: 1rem;
+      border-radius: 8px;
+      margin-top: 8px;
+    }
+
+    .section {
+      margin-top: 16px;
+    }
+  </style>
+</head>
+
 <body>
   <h2>暗黑 4 世界 Boss</h2>
 
-  <button onclick="markBossNow()">Boss 刚刷</button>
-  <button onclick="enableNotify()">开启 Boss 提前提醒</button>
+  <button class="btn primary" onclick="markBossNow()">Boss 刚刷</button>
+  <button class="btn" onclick="enableNotify()">开启提醒</button>
+
+  <div class="section">
+    <label>提前提醒分钟数</label>
+    <select id="notifySelect" onchange="changeNotifyTime()">
+      <option value="5">5 分钟</option>
+      <option value="10">10 分钟</option>
+      <option value="15">15 分钟</option>
+      <option value="30">30 分钟</option>
+    </select>
+  </div>
+
+  <div class="section">
+    <label>手动输入上次 Boss 刷新时间</label>
+    <input type="datetime-local" id="manualTime">
+    <button class="btn" onclick="applyManualTime()">确认使用该时间</button>
+  </div>
 
   <p id="next"></p>
-  <p id="countdown" style="font-size:20px;"></p>
+  <div id="countdown" class="countdown"></div>
 
-  <script>
-    let lastBoss = new Date("2025-12-30T10:45:00"); // 初始锚点
-    const notifyBeforeMinutes = 1; // 提前提醒分钟
+<script>
+  const interval = 105 * 60 * 1000;
 
-    function updateTimer() {
-      const interval = 105 * 60 * 1000;
-      let now = new Date();
+  let lastBoss = localStorage.getItem("lastBoss")
+    ? new Date(Number(localStorage.getItem("lastBoss")))
+    : new Date();
 
-      while (lastBoss.getTime() + interval <= now.getTime()) {
-        lastBoss = new Date(lastBoss.getTime() + interval);
-      }
+  let notifyBeforeMinutes = localStorage.getItem("notifyBefore")
+    ? Number(localStorage.getItem("notifyBefore"))
+    : 10;
 
-      let nextBoss = new Date(lastBoss.getTime() + interval);
-      let diff = nextBoss - now;
+  document.getElementById("notifySelect").value = notifyBeforeMinutes;
 
-      let h = Math.floor(diff / 3600000);
-      let m = Math.floor((diff % 3600000) / 60000);
-      let s = Math.floor((diff % 60000) / 1000);
+  function saveState() {
+    localStorage.setItem("lastBoss", lastBoss.getTime());
+    localStorage.setItem("notifyBefore", notifyBeforeMinutes);
+  }
 
-      document.getElementById("next").innerText =
-        "下次 Boss 时间：" + nextBoss.toLocaleString();
+  function updateTimer() {
+    let now = new Date();
 
-      document.getElementById("countdown").innerText =
-        `剩余：${h}小时 ${m}分 ${s}秒`;
+    while (lastBoss.getTime() + interval <= now.getTime()) {
+      lastBoss = new Date(lastBoss.getTime() + interval);
+      saveState();
     }
 
-    setInterval(updateTimer, 1000);
+    let nextBoss = new Date(lastBoss.getTime() + interval);
+    let diff = nextBoss - now;
+
+    let m = Math.floor(diff / 60000);
+    let s = Math.floor((diff % 60000) / 1000);
+
+    document.getElementById("next").innerText =
+      "下次 Boss：" + nextBoss.toLocaleString();
+
+    const cd = document.getElementById("countdown");
+    cd.innerText = `${m} 分 ${s} 秒`;
+    cd.classList.toggle("danger", m < 10);
+  }
+
+  setInterval(updateTimer, 1000);
+  updateTimer();
+
+  function markBossNow() {
+    lastBoss = new Date();
+    saveState();
+    scheduleNotify();
+    alert("已记录 Boss 刚刚刷新");
+  }
+
+  function applyManualTime() {
+    const val = document.getElementById("manualTime").value;
+    if (!val) {
+      alert("请先选择时间");
+      return;
+    }
+
+    lastBoss = new Date(val);
+    saveState();
+    scheduleNotify();
     updateTimer();
+    alert("已使用手动输入的 Boss 时间");
+  }
 
-    function markBossNow() {
-      lastBoss = new Date();
-      scheduleNotify();
-      alert("已记录 Boss 刚刚刷新");
-    }
+  function changeNotifyTime() {
+    notifyBeforeMinutes = Number(document.getElementById("notifySelect").value);
+    saveState();
+    scheduleNotify();
+  }
 
-    function enableNotify() {
-      Notification.requestPermission().then(permission => {
-        if (permission === "granted") {
-          scheduleNotify();
-          alert("世界 Boss 提前提醒已开启");
-        } else {
-          alert("未允许通知");
-        }
+  function enableNotify() {
+    Notification.requestPermission().then(p => {
+      if (p === "granted") {
+        scheduleNotify();
+        alert("提醒已开启");
+      }
+    });
+  }
+
+  function scheduleNotify() {
+    navigator.serviceWorker.ready.then(reg => {
+      reg.active.postMessage({
+        type: "schedule",
+        lastBoss: lastBoss.getTime(),
+        before: notifyBeforeMinutes
       });
-    }
+    });
+  }
 
-    function scheduleNotify() {
-      navigator.serviceWorker.ready.then(reg => {
-        reg.active.postMessage({
-          type: "schedule",
-          lastBoss: lastBoss.getTime(),
-          before: notifyBeforeMinutes
-        });
-      });
-    }
-
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("sw.js");
-    }
-  </script>
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("sw.js");
+  }
+</script>
 </body>
+</html>
