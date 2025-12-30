@@ -1,19 +1,15 @@
-<!DOCTYPE html>
-<html lang="zh">
-<head>
-  <meta charset="utf-8">
-  <title>D4 世界 Boss 计时器</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="manifest" href="manifest.json">
-</head>
-
 <body>
   <h2>暗黑 4 世界 Boss</h2>
+
+  <button onclick="markBossNow()">Boss 刚刷</button>
+  <button onclick="enableNotify()">开启 Boss 提前提醒</button>
+
   <p id="next"></p>
   <p id="countdown" style="font-size:20px;"></p>
 
   <script>
-    let lastBoss = new Date("2025-12-30T10:45:00"); // 改这里
+    let lastBoss = new Date("2025-12-30T10:45:00"); // 初始锚点
+    const notifyBeforeMinutes = 1; // 提前提醒分钟
 
     function updateTimer() {
       const interval = 105 * 60 * 1000;
@@ -40,9 +36,35 @@
     setInterval(updateTimer, 1000);
     updateTimer();
 
+    function markBossNow() {
+      lastBoss = new Date();
+      scheduleNotify();
+      alert("已记录 Boss 刚刚刷新");
+    }
+
+    function enableNotify() {
+      Notification.requestPermission().then(permission => {
+        if (permission === "granted") {
+          scheduleNotify();
+          alert("世界 Boss 提前提醒已开启");
+        } else {
+          alert("未允许通知");
+        }
+      });
+    }
+
+    function scheduleNotify() {
+      navigator.serviceWorker.ready.then(reg => {
+        reg.active.postMessage({
+          type: "schedule",
+          lastBoss: lastBoss.getTime(),
+          before: notifyBeforeMinutes
+        });
+      });
+    }
+
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("sw.js");
     }
   </script>
 </body>
-</html>
