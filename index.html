@@ -1,181 +1,186 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="en">
 <head>
-  <meta charset="utf-8">
-  <title>D4 世界 Boss</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="manifest" href="manifest.json">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Diablo 4 World Boss Timer</title>
 
-  <style>
-    body {
-      background: #0e0e0e;
-      color: #fff;
-      font-family: system-ui, sans-serif;
-      margin: 0;
-      padding: 16px;
-      text-align: center;
-    }
+<style>
+  body {
+    font-family: system-ui, -apple-system, BlinkMacSystemFont;
+    background: #111;
+    color: #fff;
+    margin: 0;
+    padding: 16px;
+    display: flex;
+    justify-content: center;
+  }
 
-    h2 {
-      font-size: 1.5rem;
-      margin-bottom: 12px;
-    }
+  .app {
+    width: 100%;
+    max-width: 420px;
+    text-align: center;
+  }
 
-    .btn {
-      width: 100%;
-      padding: 14px;
-      margin: 8px 0;
-      font-size: 1rem;
-      border-radius: 10px;
-      border: none;
-      background: #2c2c2c;
-      color: #fff;
-    }
+  h1 {
+    margin-bottom: 8px;
+    font-size: 1.4rem;
+  }
 
-    .btn.primary {
-      background: #b30000;
-    }
+  .countdown {
+    font-size: 2.4rem;
+    margin: 16px 0;
+  }
 
-    .countdown {
-      font-size: 2rem;
-      margin-top: 16px;
-    }
+  .red {
+    color: #ff4d4d;
+  }
 
-    .danger {
-      color: #ff3b3b;
-    }
+  .time {
+    font-size: 0.9rem;
+    color: #aaa;
+  }
 
-    input, select {
-      width: 100%;
-      padding: 12px;
-      font-size: 1rem;
-      border-radius: 8px;
-      margin-top: 8px;
-    }
+  button, input {
+    width: 100%;
+    padding: 14px;
+    margin-top: 10px;
+    font-size: 1rem;
+    border-radius: 8px;
+    border: none;
+  }
 
-    .section {
-      margin-top: 16px;
-    }
-  </style>
+  button {
+    background: #2d7cff;
+    color: white;
+  }
+
+  button.secondary {
+    background: #444;
+  }
+
+  input {
+    background: #222;
+    color: white;
+  }
+
+  label {
+    font-size: 0.9rem;
+    margin-top: 12px;
+    display: block;
+    text-align: left;
+    color: #ccc;
+  }
+</style>
 </head>
 
 <body>
-  <h2>暗黑 4 世界 Boss</h2>
+<div class="app">
+  <h1>Diablo 4 World Boss</h1>
 
-  <button class="btn primary" onclick="markBossNow()">Boss 刚刷</button>
-  <button class="btn" onclick="enableNotify()">开启提醒</button>
+  <div id="countdown" class="countdown">--:--</div>
+  <div id="nextTime" class="time"></div>
 
-  <div class="section">
-    <label>提前提醒分钟数</label>
-    <select id="notifySelect" onchange="changeNotifyTime()">
-      <option value="5">5 分钟</option>
-      <option value="10">10 分钟</option>
-      <option value="15">15 分钟</option>
-      <option value="30">30 分钟</option>
-    </select>
-  </div>
+  <label>提前提醒（分钟）</label>
+  <input type="number" id="notifyBefore" min="1" value="10" />
 
-  <div class="section">
-    <label>手动输入上次 Boss 刷新时间</label>
-    <input type="datetime-local" id="manualTime">
-    <button class="btn" onclick="applyManualTime()">确认使用该时间</button>
-  </div>
+  <button onclick="markBossNow()">🔴 Boss 刚刷</button>
 
-  <p id="next"></p>
-  <div id="countdown" class="countdown"></div>
+  <label>手动输入上次 Boss 时间</label>
+  <input type="datetime-local" id="manualTime" />
+  <button class="secondary" onclick="setManualTime()">保存时间</button>
+</div>
 
 <script>
-  const interval = 105 * 60 * 1000;
+const BOSS_INTERVAL = 105 * 60 * 1000; // 固定 105 分钟
+let lastBossUTC = null;
+let notifyTimeout = null;
 
-  let lastBoss = localStorage.getItem("lastBoss")
-    ? new Date(Number(localStorage.getItem("lastBoss")))
-    : new Date();
+function nowUTC() {
+  return Date.now();
+}
 
-  let notifyBeforeMinutes = localStorage.getItem("notifyBefore")
-    ? Number(localStorage.getItem("notifyBefore"))
-    : 10;
+function saveLastBoss(ts) {
+  localStorage.setItem("lastBossUTC", ts.toString());
+}
 
-  document.getElementById("notifySelect").value = notifyBeforeMinutes;
+function loadLastBoss() {
+  const v = localStorage.getItem("lastBossUTC");
+  return v ? parseInt(v, 10) : null;
+}
 
-  function saveState() {
-    localStorage.setItem("lastBoss", lastBoss.getTime());
-    localStorage.setItem("notifyBefore", notifyBeforeMinutes);
+function requestNotifyPermission() {
+  if (Notification.permission === "default") {
+    Notification.requestPermission();
   }
+}
 
-  function updateTimer() {
-    let now = new Date();
+function scheduleNotification(nextBossUTC) {
+  clearTimeout(notifyTimeout);
 
-    while (lastBoss.getTime() + interval <= now.getTime()) {
-      lastBoss = new Date(lastBoss.getTime() + interval);
-      saveState();
-    }
+  if (Notification.permission !== "granted") return;
 
-    let nextBoss = new Date(lastBoss.getTime() + interval);
-    let diff = nextBoss - now;
+  const mins = parseInt(document.getElementById("notifyBefore").value, 10);
+  const notifyTime = nextBossUTC - mins * 60 * 1000;
+  const delay = notifyTime - nowUTC();
 
-    let m = Math.floor(diff / 60000);
-    let s = Math.floor((diff % 60000) / 1000);
-
-    document.getElementById("next").innerText =
-      "下次 Boss：" + nextBoss.toLocaleString();
-
-    const cd = document.getElementById("countdown");
-    cd.innerText = `${m} 分 ${s} 秒`;
-    cd.classList.toggle("danger", m < 10);
-  }
-
-  setInterval(updateTimer, 1000);
-  updateTimer();
-
-  function markBossNow() {
-    lastBoss = new Date();
-    saveState();
-    scheduleNotify();
-    alert("已记录 Boss 刚刚刷新");
-  }
-
-  function applyManualTime() {
-    const val = document.getElementById("manualTime").value;
-    if (!val) {
-      alert("请先选择时间");
-      return;
-    }
-
-    lastBoss = new Date(val);
-    saveState();
-    scheduleNotify();
-    updateTimer();
-    alert("已使用手动输入的 Boss 时间");
-  }
-
-  function changeNotifyTime() {
-    notifyBeforeMinutes = Number(document.getElementById("notifySelect").value);
-    saveState();
-    scheduleNotify();
-  }
-
-  function enableNotify() {
-    Notification.requestPermission().then(p => {
-      if (p === "granted") {
-        scheduleNotify();
-        alert("提醒已开启");
-      }
-    });
-  }
-
-  function scheduleNotify() {
-    navigator.serviceWorker.ready.then(reg => {
-      reg.active.postMessage({
-        type: "schedule",
-        lastBoss: lastBoss.getTime(),
-        before: notifyBeforeMinutes
+  if (delay > 0) {
+    notifyTimeout = setTimeout(() => {
+      new Notification("World Boss Incoming", {
+        body: `Boss will spawn in ${mins} minutes`
       });
-    });
+    }, delay);
+  }
+}
+
+function update() {
+  if (!lastBossUTC) return;
+
+  const nextBossUTC = lastBossUTC + BOSS_INTERVAL;
+  let diff = nextBossUTC - nowUTC();
+
+  if (diff <= 0) {
+    lastBossUTC = nextBossUTC;
+    saveLastBoss(lastBossUTC);
+    scheduleNotification(lastBossUTC + BOSS_INTERVAL);
+    return;
   }
 
-  if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("sw.js");
-  }
+  const mins = Math.floor(diff / 60000);
+  const secs = Math.floor((diff % 60000) / 1000);
+  const el = document.getElementById("countdown");
+
+  el.textContent =
+    `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+
+  el.classList.toggle("red", diff < 10 * 60 * 1000);
+
+  document.getElementById("nextTime").textContent =
+    "Next Boss: " + new Date(nextBossUTC).toLocaleString();
+}
+
+function markBossNow() {
+  lastBossUTC = nowUTC();
+  saveLastBoss(lastBossUTC);
+  scheduleNotification(lastBossUTC + BOSS_INTERVAL);
+}
+
+function setManualTime() {
+  const input = document.getElementById("manualTime").value;
+  if (!input) return;
+
+  // 关键修复点：只取 timestamp
+  const ts = new Date(input).getTime();
+  lastBossUTC = ts;
+  saveLastBoss(ts);
+  scheduleNotification(ts + BOSS_INTERVAL);
+}
+
+(function init() {
+  requestNotifyPermission();
+  lastBossUTC = loadLastBoss();
+  setInterval(update, 1000);
+})();
 </script>
 </body>
 </html>
