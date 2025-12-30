@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <title>D4 世界 Boss 计时器</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="manifest" href="manifest.json">
+</head>
+
+<body>
+  <h2>暗黑 4 世界 Boss</h2>
+  <p id="next"></p>
+  <p id="countdown" style="font-size:20px;"></p>
+
+  <script>
+    let lastBoss = new Date("2025-12-30T10:45:00"); // 改这里
+
+    function updateTimer() {
+      const interval = 105 * 60 * 1000;
+      let now = new Date();
+
+      while (lastBoss.getTime() + interval <= now.getTime()) {
+        lastBoss = new Date(lastBoss.getTime() + interval);
+      }
+
+      let nextBoss = new Date(lastBoss.getTime() + interval);
+      let diff = nextBoss - now;
+
+      let h = Math.floor(diff / 3600000);
+      let m = Math.floor((diff % 3600000) / 60000);
+      let s = Math.floor((diff % 60000) / 1000);
+
+      document.getElementById("next").innerText =
+        "下次 Boss 时间：" + nextBoss.toLocaleString();
+
+      document.getElementById("countdown").innerText =
+        `剩余：${h}小时 ${m}分 ${s}秒`;
+    }
+
+    setInterval(updateTimer, 1000);
+    updateTimer();
+
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("sw.js");
+    }
+  </script>
+</body>
+</html>
